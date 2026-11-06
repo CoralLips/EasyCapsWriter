@@ -1,4 +1,6 @@
 # 指定所有 .bat 文件在提交时将 LF 转换为 CRLF
 *.bat text eol=crlf
-*.cmd text eol=crlf
 * text=auto eol=lf
+# 后写的规则优先：批处理文件必须用 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
