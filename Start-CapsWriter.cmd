@@ -1,4 +1,2 @@
 @echo off
-cd /d "%~dp0"
-tasklist /fi "imagename eq start_server.exe" /nh | find /i "start_server.exe" >nul || start "" /min start_server.exe
-tasklist /fi "imagename eq start_client.exe" /nh | find /i "start_client.exe" >nul || start "" /min start_client.exe
+powershell -NoProfile -Command "$d='%~dp0'; foreach ($n in 'start_server','start_client') { if (Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like ($d + '*') -and $_.CommandLine -like ('*' + $n + '*') }) { continue }; if (Test-Path ($d + $n + '.exe')) { Start-Process ($d + $n + '.exe') -WorkingDirectory $d -WindowStyle Hidden } else { Start-Process ($d + '.venv\Scripts\python.exe') ($n + '.py') -WorkingDirectory $d -WindowStyle Hidden } }"
