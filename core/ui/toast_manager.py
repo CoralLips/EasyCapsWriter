@@ -112,22 +112,23 @@ class ToastMessageManager:
             return cls._instance
 
     def __init__(self) -> None:
-        if self._initialized:
-            return
+        # 启动预热与第一条提示可能同时到达，初始化完成前不能被别的线程拿去用
+        with type(self)._lock:
+            if self._initialized:
+                return
+            self.message_queue: Queue = Queue()
+            self.is_running = False
+            self.active_windows: List = []  # 运行时类型，避免循环导入
+            self.root: Optional[tk.Tk] = None
 
-        self._initialized = True
-        self.message_queue: Queue[ToastMessage] = Queue()
-        self.is_running = False
-        self.active_windows: List = []  # 运行时类型，避免循环导入
-        self.root: Optional[tk.Tk] = None
-
-        # 在子线程中启动 Tkinter
-        self.manager_thread = threading.Thread(
-            target=self._run_manager,
-            daemon=True,
-            name="ToastManagerThread"
-        )
-        self.manager_thread.start()
+            # 在子线程中启动 Tkinter
+            self.manager_thread = threading.Thread(
+                target=self._run_manager,
+                daemon=True,
+                name="ToastManagerThread"
+            )
+            self.manager_thread.start()
+            self._initialized = True
 
     def _run_manager(self) -> None:
         """在子线程中运行 Tkinter 主循环"""
@@ -164,8 +165,12 @@ class ToastMessageManager:
     def _process_queue(self) -> None:
         """处理队列中的消息"""
         try:
-            if not self.message_queue.empty():
+            while not self.message_queue.empty():
                 msg = self.message_queue.get_nowait()
+                if isinstance(msg, tuple):
+                    # 跨线程的窗口操作排进同一队列，按顺序在 Tk 线程执行
+                    self._apply(*msg)
+                    continue
                 msg_id = getattr(msg, '_id', 'unknown')
 
                 # 根据 window_type 选择窗口类
@@ -209,6 +214,18 @@ class ToastMessageManager:
         # 继续处理队列
         if self.is_running and self.root:
             self.root.after(QUEUE_POLL_INTERVAL_MS, self._process_queue)
+
+    def _apply(self, action: str, msg_id: str, text: Optional[str]) -> None:
+        for window in self.active_windows[:]:
+            if getattr(window, '_msg_id', None) != msg_id:
+                continue
+            if action == 'close':
+                window.window.destroy()
+                self._remove_window(window)
+            else:
+                window.full_text = text
+                window.label.config(text=text)
+            return
 
     def _window_exists(self, window) -> bool:
         """检查窗口是否存在"""
@@ -269,15 +286,12 @@ class ToastMessageManager:
         Args:
             msg_id: 消息唯一标识符
         """
-        for window in self.active_windows[:]:
-            if getattr(window, '_msg_id', None) == msg_id:
-                try:
-                    window.window.destroy()
-                    self.active_windows.remove(window)
-                except (tk.TclError, ValueError):
-                    pass
-                return
-        logger.warning(f"未找到消息 ID: {msg_id[:8]}")
+        # 排在创建消息之后执行：窗口尚未建出时关闭也不会漏掉
+        self.message_queue.put(('close', msg_id, None))
+
+    def update_label(self, msg_id: str, new_text: str) -> None:
+        """替换标签窗口的文字（可在任意线程调用）"""
+        self.message_queue.put(('label', msg_id, new_text))
 
     async def wait_for_window(self, msg_id: str, timeout: float = 1.0) -> Optional[ToastWindowBase]:
         """异步等待指定 ID 的窗口创建完成

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 from rich.console import Console
 from rich.theme import Theme
+from websockets.protocol import State as WebSocketState
 
 from . import logger
 
@@ -61,6 +62,8 @@ class ClientState:
 
     recording: bool = False
     recording_start_time: float = 0.0
+    recording_owner: Any = None     # 正在录音的快捷键任务
+    long_recording: bool = False    # 短按进入的连续录音
     audio_files: Dict[str, Path] = field(default_factory=dict)
 
     # 最近一次识别结果（用于手动添加纠错记录）
@@ -83,7 +86,7 @@ class ClientState:
         ws = self.websocket
         if ws is not None:
             try:
-                if not ws.closed and self.app and self.app.loop and self.app.loop.is_running():
+                if self.app and self.app.loop and self.app.loop.is_running():
                     asyncio.run_coroutine_threadsafe(ws.close(), self.app.loop)
             except Exception:
                 pass
@@ -101,6 +104,8 @@ class ClientState:
         # 重置其他状态
         self.recording = False
         self.recording_start_time = 0.0
+        self.recording_owner = None
+        self.long_recording = False
         self.audio_files.clear()
         
         logger.debug("客户端状态重置完成")
@@ -137,10 +142,7 @@ class ClientState:
         """检查 WebSocket 是否已连接"""
         if self.websocket is None:
             return False
-        try:
-            return not self.websocket.closed
-        except AttributeError:
-            return self.websocket is not None
+        return self.websocket.state is WebSocketState.OPEN
     
     def register_audio_file(self, task_id: str, file_path: Path) -> None:
         """

@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Optional
 
 from . import logger
 from core.tools.my_status import Status
+from core.client.audio.loopback import system_audio
+from core.ui.recording_indicator import indicator, tip
  
 if TYPE_CHECKING:
     from core.client.shortcut.shortcut_config import Shortcut
@@ -72,11 +74,18 @@ class ShortcutTask:
 
     def launch(self) -> None:
         """启动录音任务"""
+        if self.state.recording_owner is not None:
+            return  # 同一时间只录一段
+        if not self.app.stream.ready:
+            tip('麦克风未就绪，正在自动连接', error=True)
+            return
         logger.info(f"[{self.shortcut.key}] 触发：开始录音")
 
         # 记录开始时间
         self.recording_start_time = time.time()
         self.is_recording = True
+        self.state.recording_owner = self
+        system_audio.begin_recording()
 
         # 将开始标志放入队列
         asyncio.run_coroutine_threadsafe(
@@ -89,6 +98,7 @@ class ShortcutTask:
 
         # 打印动画：正在录音
         self._status.start()
+        indicator.show(self._label)
 
         # 启动识别任务
         recorder = self._get_recorder()
@@ -97,24 +107,34 @@ class ShortcutTask:
             self.app.loop,
         )
 
-    def cancel(self) -> None:
-        """取消录音任务（时间过短）"""
-        logger.debug(f"[{self.shortcut.key}] 取消录音任务（时间过短）")
+    def _label(self) -> str:
+        head = '🔴 连续录音' if self.state.long_recording else '🎤 录音'
+        return head + (' 🔊' if system_audio.ready else '')
 
+    def _end(self) -> None:
         self.is_recording = False
         self.state.stop_recording()
+        self.state.recording_owner = None
+        self.state.long_recording = False
+        system_audio.end_recording()
         self._status.stop()
+        indicator.hide()
 
+    def cancel(self) -> None:
+        """取消录音任务（时间过短）"""
+        if not self.is_recording:
+            return
+        logger.debug(f"[{self.shortcut.key}] 取消录音任务（时间过短）")
+        self._end()
         self.task.cancel()
         self.task = None
 
     def finish(self) -> None:
         """完成录音任务"""
+        if not self.is_recording:
+            return
         logger.info(f"[{self.shortcut.key}] 释放：完成录音")
-
-        self.is_recording = False
-        self.state.stop_recording()
-        self._status.stop()
+        self._end()
 
         asyncio.run_coroutine_threadsafe(
             self.state.queue_in.put({

@@ -49,6 +49,6 @@ DEFAULT_INITIAL_WIDTH = 0.5  # 默认宽度（屏幕的50%）
 # 内部使用常量
 # ============================================================
 
-QUEUE_POLL_INTERVAL_MS = 100  # 队列轮询间隔（毫秒）
+QUEUE_POLL_INTERVAL_MS = 25   # 队列轮询间隔（毫秒），录音浮窗要跟手
 STREAM_CHAR_DELAY_S = 0.0001  # 流式输出每个字符的延迟（秒）
 TK_SCALING_FACTOR = 2  # Tkinter DPI 缩放因子（用于高 DPI 屏幕）

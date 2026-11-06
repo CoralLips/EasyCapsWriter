@@ -7,14 +7,10 @@
 
 from __future__ import annotations
 
-import asyncio
-import platform
 from typing import Optional
 import re
 
 import keyboard
-import pyclip
-from pynput import keyboard as pynput_keyboard
 
 from config_client import ClientConfig as Config
 from core.tools.window_detector import get_active_window_info
@@ -103,35 +99,8 @@ class TextOutput:
         Args:
             text: 要粘贴的文本
         """
-        logger.debug(f"使用粘贴方式输出文本，长度: {len(text)}")
-        
-        # 保存剪贴板
-        try:
-            temp = pyclip.paste().decode('utf-8')
-        except Exception:
-            temp = ''
-        
-        # 复制结果
-        pyclip.copy(text)
-        
-        # 粘贴结果（使用 pynput 模拟 Ctrl+V）
-        controller = pynput_keyboard.Controller()
-        if platform.system() == 'Darwin':
-            # macOS: Command+V
-            with controller.pressed(pynput_keyboard.Key.cmd):
-                controller.tap('v')
-        else:
-            # Windows/Linux: Ctrl+V
-            with controller.pressed(pynput_keyboard.Key.ctrl):
-                controller.tap('v')
-        
-        logger.debug("已发送粘贴命令 (Ctrl+V)")
-        
-        # 还原剪贴板
-        if Config.restore_clip:
-            await asyncio.sleep(0.1)
-            pyclip.copy(temp)
-            logger.debug("剪贴板已恢复")
+        from core.client.clipboard import paste_text
+        await paste_text(text, restore_clipboard=Config.restore_clip)
     
     def _type_text(self, text: str) -> None:
         """

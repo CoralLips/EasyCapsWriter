@@ -109,6 +109,8 @@ class AudioRecorder:
                     logger.debug(f"录音开始，时间戳: {self._start_time}")
                     
                 elif task['type'] == 'data':
+                    if not self._start_time:
+                        continue  # 上一次录音残留的数据块
                     # 在阈值之前积攒音频数据
                     if task['time'] - self._start_time < Config.threshold:
                         self._cache.append(task['data'])
@@ -125,7 +127,7 @@ class AudioRecorder:
                     
                     # 获取音频数据
                     if self._cache:
-                        data = np.concatenate(self._cache)
+                        data = np.concatenate([*self._cache, task['data']])
                         self._cache.clear()
                     else:
                         data = task['data']

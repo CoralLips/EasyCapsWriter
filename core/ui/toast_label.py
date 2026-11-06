@@ -151,9 +151,9 @@ class ToastWindowLabel(ToastWindowBase):
             window_width = calculated_width
 
             if initial:
-                # 初始位置：水平居中，顶部在屏幕中间
-                x = (screen_width - window_width) // 2
-                y = screen_height // 2
+                # 初始位置：右下角，避开任务栏
+                x = screen_width - window_width - 30
+                y = screen_height - window_height - 90
             else:
                 # 保持当前位置，只更新大小
                 x = self.window.winfo_x()

@@ -71,6 +71,8 @@ class ResultProcessor:
         self.app = app
         self._exit_event = asyncio.Event()
         self._loop = asyncio.get_running_loop()  # 保存事件循环引用
+        # 连续录音边说边上屏：task_id -> (已上屏的原文长度, 已上屏的文字)
+        self._streamed = {}
 
     @property
     def state(self) -> ClientState:
@@ -197,9 +199,12 @@ class ResultProcessor:
                 f"时延: {delay:.2f}s"
             )
 
-        # 如果非最终结果，继续等待
+        # 非最终结果：连续录音时把新增部分先上屏，其余继续等待
         if not message.is_final:
+            if self.state.long_recording or message.task_id in self._streamed:
+                await self._stream_partial(message)
             return
+        streamed = self._streamed.pop(message.task_id, None)
 
         # 繁体转换
         if Config.traditional_convert:
@@ -256,21 +261,33 @@ class ResultProcessor:
                 logger.debug(f"潜在热词: {log_str}")
 
         # 窗口兼容性检测
-        paste = Config.paste
-        process_name = get_active_window_info().get('process_name', '')
-        logger.debug(f"当前活动窗口: {process_name}")
-        if any(app.lower() == process_name.lower() for app in Config.paste_apps):
-            paste = True
-            logger.debug(f"检测到兼容性应用: {process_name}，使用粘贴模式")
+        paste, process_name = self._paste_mode()
 
         # 自动回车检测
         for app, delay in Config.enter_apps:
             if app.lower() == process_name:
                 asyncio.create_task(_auto_enter(delay))
 
+        # 文字记录与录音保存（先于输出，输出失败也不丢记录）
+        file_audio = None
+        file_path = self.state.pop_audio_file(message.task_id)
+        if Config.save_audio and file_path:
+            file_manager = AudioFileManager()
+            file_manager.file_path = file_path
+            file_audio = file_manager.rename(text, message.time_start)
+        self.diary.write(text, message.time_start, file_audio)
+
         # LLM 处理和输出
         llm_result = None
-        if Config.llm_enabled:
+        if streamed:
+            # 已边说边上屏：只补上剩下的部分，不再走 LLM
+            done, shown = streamed
+            tail = self._correct(message.text[done:], final=True)
+            if tail:
+                await self.output.output(tail, paste=paste)
+            self.state.set_output_text(shown + tail)
+            broadcast_output_udp(shown + tail)
+        elif Config.llm_enabled:
             llm_result = await self.app.llm.process_and_output(
                 text,
                 paste=paste,
@@ -280,19 +297,6 @@ class ResultProcessor:
             await self.output.output(text, paste=paste)
             self.state.set_output_text(text)
             broadcast_output_udp(text)
-
-        # 保存录音与写入 md 文件
-        file_audio = None
-        if Config.save_audio:
-            # 重命名音频文件
-            file_path = self.state.pop_audio_file(message.task_id)
-            if file_path:
-                file_manager = AudioFileManager()
-                file_manager.file_path = file_path
-                file_audio = file_manager.rename(text, message.time_start)
-
-            # 写入日记
-            self.diary.write(text, message.time_start, file_audio)
 
         # LLM 结果显示和保存
         if Config.llm_enabled and llm_result and llm_result.processed:
@@ -310,8 +314,38 @@ class ResultProcessor:
 
         console.line()
     
+    def _paste_mode(self):
+        """是否用粘贴方式输出，以及当前活动窗口进程名"""
+        process_name = get_active_window_info().get('process_name', '')
+        logger.debug(f"当前活动窗口: {process_name}")
+        paste = Config.paste or any(app.lower() == process_name.lower() for app in Config.paste_apps)
+        return paste, process_name
+
+    def _correct(self, text: str, final: bool = False) -> str:
+        """繁简转换与热词替换；final 时去掉末尾标点"""
+        if not text:
+            return ''
+        if Config.traditional_convert:
+            text = zhconv_convert(text, Config.traditional_locale)
+        if Config.hot:
+            text = self.hotword.get_phoneme_corrector().correct(text, k=10).text
+        if final:
+            text = TextOutput.strip_punc(text)
+        return self.hotword.get_rule_corrector().substitute(text)
+
+    async def _stream_partial(self, message: RecognitionMessage) -> None:
+        """服务端每段的中间结果是累积全文，只输出比上次多出来的部分"""
+        done, shown = self._streamed.get(message.task_id, (0, ''))
+        delta = self._correct(message.text[done:])
+        if not delta:
+            return
+        await self.output.output(delta, paste=self._paste_mode()[0])
+        self._streamed[message.task_id] = (len(message.text), shown + delta)
+        logger.info(f'连续录音上屏 +{len(delta)} 字')
+
     def _cleanup(self) -> None:
         """清理资源"""
+        self._streamed.clear()
         if self.state.websocket is not None:
             try:
                 if self.state.websocket.closed:

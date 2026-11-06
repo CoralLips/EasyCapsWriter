@@ -5,6 +5,8 @@ LLM 对话记录到 Markdown
 """
 import time
 from pathlib import Path
+from config_client import ClientConfig as Config
+from core.tools.text_history import enforce_limit
 from os import makedirs
 
 
@@ -66,3 +68,5 @@ def write_llm_md(input_text: str, polished_text: str, role_name: str, time_start
 
         # 分隔线
         f.write('---\n\n')
+
+    enforce_limit(Path(), Config.text_record_max_bytes)

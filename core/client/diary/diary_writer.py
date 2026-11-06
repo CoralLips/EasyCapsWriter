@@ -14,6 +14,8 @@ from typing import Optional, List
 
 from core.client.state import console
 from . import logger
+from config_client import ClientConfig as Config
+from core.tools.text_history import enforce_limit
 
 
 # MD 文件头部模板
@@ -99,6 +101,7 @@ class DiaryWriter:
             else:
                 f.write(f'{time_hms} {text}\n\n')
         
+        enforce_limit(self.base_path, Config.text_record_max_bytes)
         logger.debug(f"写入日记: {file_md.name}")
         return file_md
     

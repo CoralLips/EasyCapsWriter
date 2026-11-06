@@ -21,6 +21,9 @@ from core.client.shortcut.key_mapper import KeyMapper
 from core.client.shortcut.emulator import ShortcutEmulator
 from core.client.shortcut.event_handler import ShortcutEventHandler
 from core.client.shortcut.task import ShortcutTask
+from core.client.audio.loopback import system_audio
+from core.ui.recording_indicator import prewarm
+from config_client import ClientConfig as Config
 
 if TYPE_CHECKING:
     from core.client.shortcut.shortcut_config import Shortcut
@@ -106,6 +109,14 @@ class ShortcutManager:
             if self._check_restoring(key_name, msg):
                 return True
 
+            # 音源切换键：只切换，不进录音流程
+            if key_name == Config.system_audio_key:
+                if msg in KEY_UP_MESSAGES:
+                    system_audio.toggle()
+                if self.keyboard_listener:
+                    self.keyboard_listener.suppress_event()
+                return True
+
             # 查找匹配的快捷键
             if key_name not in self.tasks:
                 return True
@@ -163,6 +174,7 @@ class ShortcutManager:
 
     def _handle_mouse_keyup(self, button_name: str, task) -> None:
         """处理鼠标按键释放事件"""
+        self._event_handler.release(button_name)
         # 单击模式
         if not task.shortcut.hold_mode:
             if task.pressed:
@@ -251,6 +263,7 @@ class ShortcutManager:
 
     def start(self) -> None:
         """启动所有监听器"""
+        prewarm()
         has_keyboard = any(s.type == 'keyboard' for s in self.shortcuts if s.enabled)
         has_mouse = any(s.type == 'mouse' for s in self.shortcuts if s.enabled)
 

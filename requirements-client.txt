@@ -9,6 +9,8 @@ keyboard
 pynput
 pyclip
 sounddevice
+SoundCard==0.4.6
+cffi
 watchdog
 
 # network and api 

@@ -8,11 +8,8 @@ LLM 获取选中文字功能
 4. 还原原来的剪贴板内容
 5. 判断内容是否变化，返回选中的文字
 """
-import time
-import pyclip
-import keyboard
 from . import logger
-from .llm_clipboard import safe_paste
+from core.client.clipboard.clipboard import copy_selected_text
 
 
 # 全局变量：记录每个角色最后一次使用的选中文字
@@ -38,23 +35,10 @@ def get_selected_text(role_config, state) -> str:
     role_name = role_config.name
 
     try:
-        # 保存当前剪贴板内容
-        original_clipboard = safe_paste()
-
-        # 模拟 Ctrl+C 复制选中的文字
-        keyboard.press_and_release('ctrl+c')
-
-        # 等待复制操作完成
-        time.sleep(0.1)
-
-        # 读取新的剪贴板内容
-        selected_text = safe_paste()
-
-        # 还原原来的剪贴板内容
-        pyclip.copy(original_clipboard)
+        selected_text = copy_selected_text()
 
         # 如果内容没有变化，说明没有选中文字，返回空字符串
-        if selected_text == original_clipboard or selected_text == state.last_output_text:
+        if not selected_text or selected_text == state.last_output_text:
             return ""
 
         # 检查长度限制

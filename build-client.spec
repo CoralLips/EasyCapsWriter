@@ -6,7 +6,7 @@
 这是为了给 Win7 打包客户端而专设的
 """
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules, copy_metadata
 # from PyInstaller.building.build_main import Analysis, COLLECT
 from os.path import join, basename, dirname, exists
 from os import walk, makedirs
@@ -55,6 +55,12 @@ try:
     binaries += pillow_binaries[1]
 except:
     pass
+
+# SoundCard comes from the pinned dependency, not a vendored local copy.
+# The Windows backend reads this header and uses the CFFI extension at runtime.
+datas += collect_data_files('soundcard', includes=['*.h'])
+datas += copy_metadata('SoundCard')  # includes its BSD-3-Clause license
+hiddenimports += ['soundcard', 'soundcard.mediafoundation', 'cffi', '_cffi_backend']
 
 # 隐藏导入 - 确保所有需要的模块都被包含
 hiddenimports += [

@@ -29,11 +29,22 @@ class ShortcutEventHandler:
         self.tasks = tasks
         self.pool = pool
         self.emulator = emulator
+        self._held = set()  # 按住中的键，忽略系统的自动重复按下
+
+    def release(self, key_name) -> None:
+        self._held.discard(key_name)
 
     def handle_keydown(self, key_name, task) -> None:
         """处理按键按下事件"""
         # 长按模式
         if task.shortcut.hold_mode:
+            if key_name in self._held:
+                return
+            self._held.add(key_name)
+            # 连续录音中，按下任一录音键即结束
+            if task.state.long_recording:
+                task.state.recording_owner.finish()
+                return
             if not task.is_recording:
                 task.launch()
             return
@@ -49,6 +60,7 @@ class ShortcutEventHandler:
 
     def handle_keyup(self, key_name, task) -> None:
         """处理按键释放事件"""
+        self.release(key_name)
         # 单击模式
         if not task.shortcut.hold_mode:
             if task.pressed:
@@ -70,15 +82,10 @@ class ShortcutEventHandler:
             task.finish()
 
     def _handle_short_press(self, key_name, task) -> None:
-        """处理短按情况"""
-        cancel_start = time.perf_counter()
-        task.cancel()
-        cancel_time = (time.perf_counter() - cancel_start) * 1000
-        logger.debug(f"[{key_name}] task.cancel() 耗时: {cancel_time:.2f}ms")
+        """处理短按情况：进入连续录音，再按一次结束"""
+        task.state.long_recording = True
+        logger.info(f"[{key_name}] 短按：连续录音，再按一次结束")
 
-        if task.shortcut.suppress:
-            logger.debug(f"[{key_name}] 安排异步补发按键")
-            self.pool.submit(self.emulator.emulate_key, key_name)
 
     def _count_down(self, task) -> None:
         """倒计时（单击模式）"""

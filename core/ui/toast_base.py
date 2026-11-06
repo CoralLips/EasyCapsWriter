@@ -336,6 +336,8 @@ class ToastWindowBase(ABC):
 
     def _start_destroy_timer(self) -> None:
         """启动自动销毁计时器"""
+        if self.duration <= 0:
+            return  # 时长为 0 的状态窗由调用方关闭
         if self.timer_id:
             self.window.after_cancel(self.timer_id)
         self.timer_id = self.window.after(self.duration, self._destroy_window)

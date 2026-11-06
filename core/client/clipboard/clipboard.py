@@ -7,10 +7,15 @@
 2. 安全写入剪贴板
 3. 剪贴板保存/恢复上下文管理器
 4. 粘贴文本（模拟 Ctrl+V）
+5. 读取选中文字（模拟 Ctrl+C）
+
+Windows 下保存并恢复剪贴板的全部格式（含图片、文件），见 windows_clipboard。
 """
 import asyncio
 import platform
+import time
 from contextlib import contextmanager
+import keyboard as typing_keyboard
 import pyclip
 from pynput import keyboard
 from . import logger
@@ -108,6 +113,9 @@ async def paste_text(text: str, restore_clipboard: bool = True):
         text: 要粘贴的文本
         restore_clipboard: 粘贴后是否恢复原剪贴板内容
     """
+    if platform.system() == 'Windows':
+        return await _paste_windows(text, restore_clipboard)
+
     # 保存剪切板
     original = ''
     if restore_clipboard:
@@ -120,21 +128,61 @@ async def paste_text(text: str, restore_clipboard: bool = True):
     pyclip.copy(text)
     logger.debug(f"已复制文本到剪贴板，长度: {len(text)}")
 
-    # 粘贴结果（使用 pynput 模拟 Ctrl+V）
-    controller = keyboard.Controller()
-    if platform.system() == 'Darwin':
-        # macOS: Command+V
-        with controller.pressed(keyboard.Key.cmd):
-            controller.tap('v')
-    else:
-        # Windows/Linux: Ctrl+V
-        with controller.pressed(keyboard.Key.ctrl):
-            controller.tap('v')
-    
-    logger.debug("已发送粘贴命令 (Ctrl+V)")
+    _send_paste_key()
 
     # 还原剪贴板
     if restore_clipboard and original:
         await asyncio.sleep(0.1)
         pyclip.copy(original)
         logger.debug("剪贴板已恢复")
+
+
+def _send_paste_key() -> None:
+    """模拟 Ctrl+V（macOS 为 Command+V）"""
+    controller = keyboard.Controller()
+    modifier = keyboard.Key.cmd if platform.system() == 'Darwin' else keyboard.Key.ctrl
+    with controller.pressed(modifier):
+        controller.tap('v')
+    logger.debug("已发送粘贴命令 (Ctrl+V)")
+
+
+async def _paste_windows(text: str, restore_clipboard: bool) -> None:
+    from .windows_clipboard import WindowsClipboard, ClipboardUnavailable
+    with WindowsClipboard() as clip:
+        try:
+            if restore_clipboard:
+                clip.save()
+        except ClipboardUnavailable as exc:
+            logger.warning(f"剪贴板内容无法安全保存，改为直接输入: {exc}")
+            typing_keyboard.write(text)
+            return
+        clip.set_text(text)
+        _send_paste_key()
+        if restore_clipboard:
+            await asyncio.sleep(0.1)  # 等目标程序读走再恢复
+            clip.restore()
+            logger.debug("剪贴板已恢复")
+
+
+def copy_selected_text() -> str:
+    """模拟 Ctrl+C 读取选中文字，读完恢复原剪贴板；没有选中内容时返回空字符串"""
+    if platform.system() != 'Windows':
+        original = safe_paste()
+        typing_keyboard.press_and_release('ctrl+c')
+        time.sleep(0.1)
+        selected = safe_paste()
+        pyclip.copy(original)
+        return '' if selected == original else selected
+
+    from .windows_clipboard import WindowsClipboard, ClipboardUnavailable
+    with WindowsClipboard() as clip:
+        try:
+            clip.save()
+        except ClipboardUnavailable as exc:
+            logger.warning(f"剪贴板内容无法安全保存，本次不读取选中文字: {exc}")
+            return ''
+        typing_keyboard.press_and_release('ctrl+c')
+        time.sleep(0.1)
+        selected = clip.copied_text()
+        clip.restore()
+        return selected

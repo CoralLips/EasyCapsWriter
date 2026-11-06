@@ -1,132 +1,122 @@
-# CapsWriter-Offline
+# EasyCapsWriter
 
-![demo](assets/demo.png)
+默认按住 F2 说话，松开结束；短按 F2 可连续录音，再按一次停止。F3 用于切换「仅麦克风」与「麦克风 + 系统音」，切换完成后再开始录音。
 
-> **按住 CapsLock 说话，松开就上屏。就这么简单。**
+这是基于 [HaujetZhao/CapsWriter-Offline](https://github.com/HaujetZhao/CapsWriter-Offline) 的 Windows fork，保留原项目的客户端／服务端结构、热词、文件转录和可选 LLM 功能。本分支补充一键启动、系统音混录和有容量上限的文字记录。许可证仍为 [MIT](LICENSE)。
 
-**CapsWriter-Offline** 是一个专为 Windows 打造的**完全离线**语音输入工具。
+语音识别在本机运行；可选 LLM 角色使用你配置的服务。使用云端 LLM 时，相关文字会发送给该服务，不能称为全程离线。
 
-## ✨ 核心特性
+## 快速开始
 
--   **语音输入**：按住 `CapsLock键` 或 `鼠标侧键X2` 说话，松开即输入，超低延迟，默认去除末尾逗句号。支持对讲机模式和单击录音模式。
--   **文件转录**：音视频文件往客户端 exe 一丢，字幕 (`.srt`)、文本 (`.txt`)、时间戳 (`.json`) 统统都有。
--   **数字 ITN**：自动将「十五六个」转为「15~16个」，支持各种复杂数字格式。
--   **热词替换**：在 `hot.txt` 记下偏僻词，通过音素模糊匹配，相似度大于阈值则强制替换。
--   **正则替换**：在 `hot-rule.txt` 用正则或简单等号规则，精准强制替换。
--   **LLM 角色**：预置了润色、小助理等角色，当识别结果的开头匹配任一角色名字时，将交由该角色处理。
--   **托盘菜单**：右键托盘图标即可添加热词、复制结果、清除LLM记忆。
--   **C/S 架构**：服务端与客户端分离，虽然 Win7 老电脑跑不了服务端模型，但最少能用客户端输入。
--   **日记归档**：按日期保存你的每一句语音及其识别结果。
--   **录音保存**：所有语音均保存为本地音频文件，隐私安全，永不丢失。
+当前仓库提供源码预览版，已在一台 Windows 11 电脑上验证听写，尚未发布本分支的 Windows 安装包。直接使用源码请先看文末「从源码运行与构建」；下列步骤适用于自行构建出的 Windows 包。
 
-**CapsWriter-Offline** 的精髓在于：**完全离线**（不受网络限制）、**响应极快**、**高准确率** 且 **高度自定义**。我追求的是一种「如臂使指」的流畅感，让它成为一个专属的一体化输入利器。无需安装，一个U盘就能带走，随插随用，保密电脑也能用。
+支持 Windows 10/11 64 位。使用打包后的 Windows 版本不需要另外安装 Python。
 
-以下为支持的模型：
+1. 安装 [Microsoft VC++ x64 运行库](https://aka.ms/vs/17/release/vc_redist.x64.exe)。
+2. 完整解压构建出的 Windows 包，保留 `internal/`、`core/` 等文件夹；不要只复制两个 exe。
+3. 从上游 [模型下载页](https://github.com/HaujetZhao/CapsWriter-Offline/releases/tag/models) 下载与 `config_server.py` 中 `model_type` 对应的模型，按 `models/` 下说明放置。程序不会自动下载模型。
+4. 双击 **`Start-CapsWriter.cmd`**，它会启动本机识别服务端和客户端。
+5. 右下角提示「麦克风已连接」后，将光标放入输入框，按录音快捷键，默认是 **F2**。按住说话、松开结束；短按进入连续录音，再按一次结束。首次加载识别模型可能较慢，客户端会自动重连服务端。
 
-| 引擎名 | 准确性 | 速度 | 格式 | 显卡加速 |
-|------|-------|------|------|---------|
-| Paraformer | ★★★☆☆ | ★★★★★ | ONNX | ❌ |
-| SenseVoice-Small | ★★★☆☆ | ★★★★★ | ONNX | ✅ |
-| Fun-ASR-Nano | ★★★★☆ | ★★★★☆ | ONNX + GGUF | ✅ |
-| Qwen3-ASR | ★★★★★ | ★★★☆☆ | ONNX + GGUF | ✅ |
+已在运行的服务端或客户端不会重复启动。两个窗口启动后最小化到托盘；托盘的两个 **CW** 图标分别属于客户端和服务端，右键菜单可显示控制台或退出。出问题时打开控制台或查看 `logs/` 下的日志。
 
+## 录什么声音
 
-性能参考（20s 音频转录延迟）：
+| 操作 | 行为 |
+| --- | --- |
+| 默认启动 | 仅麦克风 |
+| 按 F3 | 切换到麦克风 + 系统音，右下角提示「已含系统音」后生效 |
+| 再按 F3 | 回到仅麦克风 |
+| 按住 F2，松开 | 开始／结束本次听写 |
+| 短按 F2，再按一次 | 连续录音／停止 |
+| 按住鼠标 X2，松开 | 开始／结束本次听写 |
+| 短按鼠标 X2 | 保留原有前进／取消行为，不切换连续录音 |
 
-| 模型 | CPU U9-285H | GPU RTX5050 |
-|------|------------|------------|
-| Paraformer | 0.6s | - |
-| SenseVoice-Small | 0.6s | 0.15s |
-| Fun-ASR-Nano | 2.0s | 0.5s |
-| Qwen3-ASR-1.7B | 4.0s | 1.0s |
+系统音通过 Windows WASAPI loopback 采集，再与麦克风混合，不安装虚拟声卡。因此 Windows 的「输入设备」里不会出现一个名为 CapsWriter 的麦克风。其他应用也不会把它识别为录音设备。
 
-详细功能说明请参考 [`docs/`](docs/) 目录：
-- [环境依赖安装说明](docs/环境依赖安装说明.md) — VC++ 运行库、FFmpeg 安装
-- [热词功能如何使用](docs/热词功能如何使用.md) — 热词替换、规则替换、自定义短语
-- [角色功能如何使用](docs/角色功能如何使用.md) — LLM 角色配置、输出模式、创建新角色
-- [识别语言如何配置](docs/识别语言如何配置.md) — 各引擎语言支持范围与配置方法
-- [文件转录功能如何使用](docs/文件转录功能如何使用.md) — 拖拽转字幕、时间戳对齐
-- [显卡加速的若干问题](docs/显卡加速的若干问题.md) — DirectML、Vulkan 加速配置
-- [模型下载的若干问题](docs/模型下载的若干问题.md) — 引擎选择、模型下载、目录结构
-- [常见问题](docs/常见问题.md) — FAQ
-- [更新日志](docs/CHANGELOG.md) 
+混录会包括当前播放的系统声音。建议戴耳机，避免扬声器声音又被麦克风收录。请在录音前切换音源；混录初始化失败时回到仅麦克风，并显示错误。F3 可在 `config_client.py` 的 `system_audio_key` 中修改。
 
+插拔耳麦或在 Windows 中切换默认麦克风时，客户端会自动换到新的默认设备，右下角提示当前麦克风；正在进行的录音会先结束。连续录音时，识别结果按段边说边上屏。
 
-## 💻 平台支持
+## 保存与联网
 
-目前**仅能保证在 Windows 10/11 (64位) 下完美运行**。
+- **录音默认不保存**：`config_client.py` 中 `save_audio = False`。识别时仍需在内存中处理音频。
+- **文字独立保存**：普通听写和 LLM 输入输出按日期归档在 `年/月/` 目录。总容量由 `text_record_max_bytes` 控制，默认 **10 MiB**；超出时删除最旧的记录文件。
+- **剪贴板会还原**：粘贴识别结果后恢复原剪贴板，包括图片和文件；无法安全保存的特殊格式会改为直接输入文字。
+- 日志可能包含识别文字，分享前请检查。
+- **LLM 是可选项**：把 `llm_enabled` 设为 `False` 可关闭。使用本地 Ollama／LM Studio 或关闭 LLM 时，听写不依赖云端模型；使用云端服务需要网络及你自己的凭据。
+- **文件转录由用户主动触发**：拖入文件会按配置生成字幕、文本或时间戳输出。原始媒体和这些导出文件不属于自动循环清理的听写记录。
 
-- **Linux**：暂无环境进行测试和打包，无法保证兼容性。
-- **MacOS**：由于底层的 `keyboard` 库已放弃支持 MacOS，且系统限制极多，暂时无法支持。
+默认麦克风分段时长 `mic_seg_duration` 为 60 秒，长录会分段识别。配置修改后重启相应进程。不要把自己的配置、热词、角色凭据、记录或日志放进公开发布包。
 
-[LazyTyper](https://lazytyper.com/) 和 [闪电说](https://shandianshuo.cn/) 也是很优秀的作品，都有离线引擎，都支持 Windows Linux 与 MacOS，并都有漂亮的图形化页面，推荐使用。
+## 原有功能
 
-CapsWriter 的特别之处在于追求：
+热词和正则替换仍使用 `hot.txt`、`hot-rule.txt`；服务端热词使用 `hot-server.txt`。文件转录可将音视频文件拖到 `start_client.exe` 上，需先安装 [FFmpeg](https://ffmpeg.org/download.html) 并加入 PATH。
 
-- 无感输入
-- 完全离线，不受网络约束
-- 低延迟，尽量做到硬件极限的最快速度
-- 高度自定义的热词系统
+详细配置见：
 
+- [环境依赖](docs/环境依赖安装说明.md)
+- [热词用法](docs/热词功能如何使用.md)
+- [LLM 角色配置](docs/角色功能如何使用.md)
+- [文件转录](docs/文件转录功能如何使用.md)
+- [识别语言](docs/识别语言如何配置.md)
+- [模型下载](docs/模型下载的若干问题.md)
 
-## 🎬 快速开始
+本分支的一键启动、声音切换和保存默认值以本页为准。
 
-1.  **准备环境**：确保安装了 [VC++ 运行库](https://learn.microsoft.com/zh-cn/cpp/windows/latest-supported-vc-redist)。若要使用文件转录功能，还需安装 [ffmpeg](https://ffmpeg.org/download.html) 并确保其在系统 PATH 中。
-2.  **下载解压**：下载 [Latest Release](https://github.com/HaujetZhao/CapsWriter-Offline/releases/latest) 里的软件本体，再到 [Models Release](https://github.com/HaujetZhao/CapsWriter-Offline/releases/tag/models) 下载模型压缩包，将模型解压，放入 `models` 文件夹中对应模型的文件夹里。
-3.  **启动服务**：双击 `start_server.exe`，**它会自动最小化到托盘菜单**。
-4.  **启动听写**：双击 `start_client.exe`，**它会自动最小化到托盘菜单**。
-5.  **开始录音**：按住 `CapsLock键` 或 `鼠标侧键X2` 就可以说话了！
+## 常见问题
 
+**为什么 Windows 找不到 CapsWriter 输入设备？**
 
-## ⚙️ 个性化配置
+它是读取麦克风并输出文字的软件，不是虚拟麦克风。Windows 中选择实际麦克风，再由 CapsWriter 采集。
 
-所有的设置都在根目录的 `config_server.py` 和 `config_client.py` 里，可直接编辑。
+**为什么有两个托盘图标？**
 
+客户端负责录音和输入，服务端负责本机模型识别。一个入口仍会启动这两个内部进程。
 
-## 🛠️ 常见问题
+**为什么按 F2 没反应？**
 
+右键托盘图标显示控制台查看报错。服务端问题检查模型、运行库和端口；客户端问题检查 Windows 麦克风权限与默认输入设备。麦克风未就绪时，右下角会提示正在自动连接。
 
-**Q: 为什么按了没反应？**  
-A: 请确认 `start_client.exe` 的黑窗口还在运行。若想在管理员权限运行的程序中输入，也需以管理员权限运行客户端。
+**能连接另一台电脑的服务端吗？**
 
-**Q: 为什么识别结果没字？**  
-A: 到 `年/月/assets` 文件夹中检查录音文件，看是不是没有录到音；听听录音效果，是不是麦克风太差，建议使用桌面 USB 麦克风；检查麦克风权限。
+可以保留原有配置方式，修改客户端地址后直接启动 `start_client.exe`。一键入口只管理本机识别服务。
 
-**Q: 想要隐藏黑窗口？**  
-A: 点击托盘菜单即可隐藏黑窗口。
+## 从源码运行与构建
 
-**Q: 如何开机启动？**  
-A: `Win+R` 输入 `shell:startup` 打开启动文件夹，将服务端、客户端的快捷方式放进去即可。
+开发与构建使用上游要求的 Python 3.14 或更新版本；打包后的普通用户不需要安装。使用干净源码副本，别在日用安装目录里构建。依赖沿用上游锁文件中的公开阿里云 PyPI 镜像，配置已明确写入项目。
 
-更多问题请参阅 [docs/常见问题.md](docs/常见问题.md)。
+先安装 Git、Python 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)，获取源码：
 
+```powershell
+git clone https://github.com/CoralLips/EasyCapsWriter.git
+cd EasyCapsWriter
+```
 
-## 🚀 我的其他优质项目推荐
+运行前还需要准备上文所述的模型和 VC++ 运行库。默认 `qwen_asr` 及 `fun_asr_nano` 后端还依赖原生推理库：按 [二进制下载说明](core/server/engines/llama/bin/llama.cpp二进制下载到这里.txt) 下载固定版本的 llama.cpp Windows Vulkan 包，将包内 DLL 及其依赖文件解压到 `core/server/engines/llama/bin/`，确保该目录直接包含 `llama.dll`、`ggml.dll` 和 `ggml-base.dll`。`uv sync` 不会下载这些库；构建前也需要先准备它们。
 
-| 项目名称 | 说明 | 体验地址 |
-| :--- | :--- | :--- |
-| [**IME_Indicator**](https://github.com/HaujetZhao/IME_Indicator) | Windows 输入法中英状态指示器 | [下载即用](https://github.com/HaujetZhao/IME_Indicator/releases/latest/download/IME-Indicator.exe) |
-| [**Rust-Tray**](https://github.com/HaujetZhao/Rust-Tray) | 将控制台最小化到托盘图标的工具 | [下载即用](https://github.com/HaujetZhao/Rust-Tray/releases/latest/download/Tray.exe) |
-| [**Gallery-Viewer**](https://github.com/HaujetZhao/Gallery-Viewer-HTML) | 网页端图库查看器，纯 HTML 实现 | [点击即用](https://haujetzhao.github.io/Gallery-Viewer-HTML/) |
-| [**全景图片查看器**](https://github.com/HaujetZhao/Panorama-Viewer-HTML) | 单个网页实现全景照片、视频查看 | [点击即用](https://haujetzhao.github.io/Panorama-Viewer-HTML/) |
-| [**图标生成器**](https://github.com/HaujetZhao/Font-Awesome-Icon-Generator-HTML) | 使用 Font-Awesome 生成网站 Icon | [点击即用](https://haujetzhao.github.io/Font-Awesome-Icon-Generator-HTML/) |
-| [**五笔编码反查**](https://github.com/HaujetZhao/wubi86-revert-query) | 86 五笔编码在线反查 | [点击即用](https://haujetzhao.github.io/wubi86-revert-query/) |
-| [**快捷键映射图**](https://github.com/HaujetZhao/ShortcutMapper_Chinese) | 可视化、交互式的快捷键映射图 (中文版) | [点击即用](https://haujetzhao.github.io/ShortcutMapper_Chinese/) |
+```powershell
+uv sync --locked --group build
+uv run python start_server.py
+# 另开终端，在同一目录运行：
+uv run python start_client.py
+```
 
+源码入口保留上游结构；`Start-CapsWriter.cmd` 只用于包含 exe 的完整 Windows 构建产物。模型仍须按上述说明另行准备。
 
-## ❤️ 致谢
+```powershell
+uv run pyinstaller --clean --noconfirm build.spec
+uv run python zip_release.py
+```
 
-本项目基于以下优秀的开源项目：
+产物位于 `dist/CapsWriter-Offline/`，压缩包位于 `release/`（需要 [7-Zip](https://www.7-zip.org/)）。`build-client.spec` 保留仅客户端构建，不包含本机服务端及一键入口。
 
--   [Sherpa-ONNX](https://github.com/k2-fsa/sherpa-onnx)
--   [FunASR](https://github.com/alibaba-damo-academy/FunASR)
+打包流程与上游一致：`build.spec` 用目录连接把 `models`、`core` 等文件夹接到构建目录，`zip_release.py` 打包时按上游规则排除模型权重。所以请在干净的源码副本里构建，压缩前确认配置、热词和角色模板都是公开版本。
 
-感谢 Google Antigravity、Anthropic Claude、GLM、DeepSeek，如果不是这些编程助手，许多功能（例如基于音素的热词检索算法）我是无力实现的。
+系统音依赖固定版本 **SoundCard 0.4.6（BSD-3-Clause）**，通过包管理器安装，未复制本机的第三方源码。构建会收集其 Windows 头文件、CFFI 扩展和许可证元数据；许可证随 `internal/` 中的 SoundCard 元数据一起分发。
 
-特别感谢那些慷慨解囊的捐助者，你们的捐助让我用在了购买这些优质的 AI 编程助手服务，并最终将这些成果反馈到了软件的更新里。
+## 上游与致谢
 
+原项目：[CapsWriter-Offline](https://github.com/HaujetZhao/CapsWriter-Offline)，作者 HaujetZhao。保留上游 MIT 版权声明，模型及第三方依赖适用各自许可证。
 
-如果觉得好用，欢迎点个 Star 或者打赏支持：
-
-
-![sponsor](assets/sponsor.jpg)	
+感谢原项目，以及 [Sherpa-ONNX](https://github.com/k2-fsa/sherpa-onnx)、[FunASR](https://github.com/alibaba-damo-academy/FunASR)、[SoundCard](https://github.com/bastibe/SoundCard) 等依赖的维护者。
